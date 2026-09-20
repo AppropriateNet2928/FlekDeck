@@ -34,6 +34,7 @@ enum JITEnablerType : Int, CaseIterable, Identifiable {
 
 struct LCSettingsView: View {
     @State private var showIdentityReport = false
+    @State private var showBackgroundInstallReport = false
     @State var errorShow = false
     @State var errorInfo = ""
     @State var successShow = false
@@ -126,6 +127,15 @@ struct LCSettingsView: View {
     // Published by this app at launch for the extension to pick up.
     @AppStorage("LCHostEncryptedUdid", store: LCUtils.appGroupUserDefault)
     private var publishedEncryptedUdid: String = ""
+
+    // What the continued-processing scheduler did with the last install. Whether a
+    // background task was refused, submitted, or ran is invisible from the outside:
+    // all three look like an install that simply stopped when the app went away.
+    @AppStorage("LCBackgroundInstallStatus", store: LCUtils.appGroupUserDefault)
+    private var backgroundInstallStatus: String = ""
+
+    @AppStorage("LCBackgroundInstallDetail", store: LCUtils.appGroupUserDefault)
+    private var backgroundInstallDetail: String = ""
 
     // How many times guest code actually asked the extension for the identifier,
     // and who asked first. Installing the hook and being read are different facts.
@@ -238,6 +248,30 @@ struct LCSettingsView: View {
             }
         }
         return lines.joined(separator: "\n")
+    }
+
+    private var backgroundInstallDate: Date? {
+        LCUtils.appGroupUserDefault.object(forKey: "LCBackgroundInstallDate") as? Date
+    }
+
+    private var backgroundInstallReport: String {
+        guard !backgroundInstallStatus.isEmpty else {
+            return "No install has asked for background time yet."
+        }
+        var lines = [backgroundInstallStatus]
+        if !backgroundInstallDetail.isEmpty {
+            lines.append(backgroundInstallDetail)
+        }
+        if let date = backgroundInstallDate {
+            lines.append("Recorded \(date.formatted(.relative(presentation: .numeric)))")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    // Only "Submitted", "Running" and "Finished" mean the chain is intact; every
+    // other status is a step that refused.
+    private var backgroundInstallIsProblem: Bool {
+        !["", "Submitted", "Running", "Finished"].contains(backgroundInstallStatus)
     }
 
     // Orange only when something is genuinely wrong: a parallel launch that produced
@@ -440,6 +474,48 @@ struct LCSettingsView: View {
                             Button("OK", role: .cancel) {}
                         } message: {
                             Text("\(multitaskIdentityReport)\n\nCopied to clipboard.")
+                        }
+
+                        // MARK: - Background install
+                        // Whether the last install got background time, and if not,
+                        // which step said no.
+                        HStack(spacing: 12) {
+                            Image(systemName: "arrow.down.circle")
+                                .font(.system(size: 20))
+                                .foregroundColor(.white)
+                                .frame(width: 36, height: 36)
+                                .background(Color.teal)
+                                .cornerRadius(8)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Background Install")
+                                    .font(.body)
+
+                                Text(backgroundInstallStatus.isEmpty ? "Never asked" : backgroundInstallStatus)
+                                    .font(.subheadline)
+                                    .foregroundColor(backgroundInstallIsProblem ? .orange : .secondary)
+
+                                if !backgroundInstallDetail.isEmpty {
+                                    Text(backgroundInstallDetail)
+                                        .font(.caption)
+                                        .foregroundColor(backgroundInstallIsProblem ? .orange : .secondary)
+                                        .lineLimit(2)
+                                        .minimumScaleFactor(0.8)
+                                }
+                            }
+                            Spacer()
+                        }
+                        .padding(.vertical, 6)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            UIPasteboard.general.string = backgroundInstallReport
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            showBackgroundInstallReport = true
+                        }
+                        .alert("Background Install", isPresented: $showBackgroundInstallReport) {
+                            Button("OK", role: .cancel) {}
+                        } message: {
+                            Text("\(backgroundInstallReport)\n\nCopied to clipboard.")
                         }
                     }
 

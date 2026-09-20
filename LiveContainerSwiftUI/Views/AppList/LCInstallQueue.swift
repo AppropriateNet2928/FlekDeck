@@ -170,6 +170,9 @@ final class LCInstallQueue: ObservableObject {
         let item = InstallItem(url: url, name: name, iconURL: iconURL, isManual: isManual,
                                overrides: overrides)
         items.append(item)
+        // Called from a foreground user action, which is the only point the system
+        // accepts a continued-processing submission from.
+        LCInstallBackgroundTask.begin(for: item)
         startNextDownloads()
         updateIdleTimer()
     }
