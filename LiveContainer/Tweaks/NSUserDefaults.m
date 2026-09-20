@@ -11,6 +11,7 @@
 #import "utils.h"
 #import "../../litehook/src/litehook.h"
 #include "Tweaks.h"
+#include <signal.h>
 @import ObjectiveC;
 @import MachO;
 
@@ -98,6 +99,63 @@ void NUDGuestHooksInit(void) {
         [fm createDirectoryAtPath:preferenceFolderPath.path withIntermediateDirectories:YES attributes:@{} error:&error];
     }
     
+}
+
+/// Writes the guest's preferences out before it is killed.
+///
+/// A multitask guest is ended with SIGTERM, from `-[AppSceneViewController
+/// terminate]`, and SIGTERM's default action stops the process where it stands.
+/// CFPreferences does not persist on every change — it coalesces and flushes on a
+/// timer, which is why the same setting came back saved or not depending on when
+/// the window happened to be closed.
+///
+/// Flushing here is what puts the file in the right place, not merely an earlier
+/// version of the same write. A guest's container is a staged copy inside the app
+/// group, and the host swaps it back once the process is gone, so a write that
+/// lands after that goes into the directory that was just swapped out and then
+/// discarded. Synchronizing before this process exits happens before the host can
+/// even learn it died, which is before the swap.
+///
+/// A dispatch source rather than a signal handler, because synchronizing
+/// preferences is far more than a signal handler may do. SIGTERM is ignored first
+/// so its default action cannot get there first, and the process ends with _exit,
+/// so this stays what it was — an immediate death, now with the preferences
+/// written — rather than starting to run exit handlers that never ran before.
+///
+/// Only the signalled death is covered. A guest killed outright with the host
+/// still loses whatever CFPreferences had not written.
+static dispatch_source_t terminationSource;
+void NUDGuestFlushOnTerminationInit(void) {
+    signal(SIGTERM, SIG_IGN);
+    terminationSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_SIGNAL, SIGTERM, 0,
+                                               dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0));
+    if(!terminationSource) {
+        signal(SIGTERM, SIG_DFL);
+        return;
+    }
+    dispatch_source_set_event_handler(terminationSource, ^{
+        // Closing a window was instant before this, and a wedged preferences
+        // daemon must not be able to make it anything else. The host's own
+        // SIGKILL is three seconds out, which is far too long to wait to find
+        // out that a write is not coming.
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(NSEC_PER_SEC)),
+                       dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+            _exit(0);
+        });
+
+        [NSUserDefaults.standardUserDefaults synchronize];
+        // Everything else the guest opened — suites, app groups — which the call
+        // above does not reach. CFPreferences' own entry point for this: it takes
+        // the lock that guards its sources and works from a copy made under it,
+        // which reaching into `_sources` by hand would not.
+        Class CFXPreferencesClass = NSClassFromString(@"_CFXPreferences");
+        _CFXPreferences2* preferences = [CFXPreferencesClass copyDefaultPreferences];
+        if([preferences respondsToSelector:@selector(synchronizeEverything)]) {
+            [preferences synchronizeEverything];
+        }
+        _exit(0);
+    });
+    dispatch_resume(terminationSource);
 }
 
 NSArray* appleIdentifierPrefixes = @[

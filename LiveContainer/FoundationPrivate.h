@@ -32,6 +32,7 @@ CFTypeRef SecTaskCopyValueForEntitlement(void *task, CFStringRef key, CFErrorRef
 
 @interface _CFXPreferences2 : NSObject
 +(instancetype)copyDefaultPreferences;
+-(void)synchronizeEverything;
 -(CFPropertyListRef)hook_copyAppValueForKey:(CFStringRef)key identifier:(CFStringRef)identifier container:(CFStringRef)container configurationURL:(CFURLRef)configurationURL;
 -(CFPropertyListRef)hook_copyValueForKey:(CFStringRef)key identifier:(CFStringRef)identifier user:(CFStringRef)user host:(CFStringRef)host container:(CFStringRef)container;
 -(void)hook_setValue:(CFPropertyListRef)value forKey:(CFStringRef)key appIdentifier:(CFStringRef)appIdentifier container:(CFStringRef)container configurationURL:(CFURLRef)configurationURL;

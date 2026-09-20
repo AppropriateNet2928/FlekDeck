@@ -579,6 +579,9 @@ static NSString* invokeAppMain(NSString *selectedApp, NSString *selectedContaine
         // Nor can it record — see LCGuestCapture.m. The window says so rather
         // than letting the app fall silent with no explanation.
         LCGuestCaptureInit(dataUUID);
+        // Closing a window signals the guest dead, which is sooner than
+        // CFPreferences would have got round to writing its changes out.
+        NUDGuestFlushOnTerminationInit();
     }
     // Background downloads inside LiveProcess get our app group forced onto
     // their session configuration, which is what makes them complete.
