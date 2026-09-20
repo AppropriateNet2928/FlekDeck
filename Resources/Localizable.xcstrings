@@ -15636,6 +15636,17 @@
         }
       }
     },
+    "lc.flek.about.liveContainer" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LiveContainer"
+          }
+        }
+      }
+    },
     "lc.flek.about.license" : {
       "extractionState" : "manual",
       "localizations" : {

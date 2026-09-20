@@ -477,6 +477,15 @@
             NSBundle.mainBundle.infoDictionary[@"LCVersionInfo"]];
 }
 
+// The LiveContainer release this build was merged up to, as recorded in the
+// Info.plist. Distinct from CFBundleShortVersionString, which is FlekDeck's own
+// version. A build whose plist predates the key reports nil rather than a guess,
+// and callers drop the line instead of showing one.
++ (NSString *)getUpstreamVersion {
+    NSString *version = NSBundle.mainBundle.infoDictionary[@"LCUpstreamVersion"];
+    return version.length ? version : nil;
+}
+
 + (NSData*)bookmarkForURL:(NSURL*) url {
     return [url bookmarkDataWithOptions:(1<<11) includingResourceValuesForKeys:0 relativeToURL:0 error:0];
 }

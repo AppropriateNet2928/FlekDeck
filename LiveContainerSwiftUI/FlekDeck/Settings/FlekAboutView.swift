@@ -14,9 +14,17 @@ import SwiftUI
 struct FlekAboutView: View {
     private static let licenseURL = "https://github.com/flekstore/FlekDeck/?tab=AGPL-3.0-1-ov-file"
 
-    /// The shipped version, as Xcode wrote it into the bundle.
+    /// The shipped version, as Xcode wrote it into the bundle. FlekDeck's own,
+    /// which no longer follows the LiveContainer release it is built on.
     private var version: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+    }
+
+    /// The LiveContainer release this build was merged up to. Named here because
+    /// the page already says FlekDeck is built on LiveContainer; this says which
+    /// one. A build whose plist predates the key drops the row.
+    private var upstreamVersion: String? {
+        LCUtils.getUpstreamVersion()
     }
 
     /// Configuration, branch and commit, added to the built Info.plist by the
@@ -59,6 +67,9 @@ struct FlekAboutView: View {
                 infoRow("lc.flek.about.version".loc, version)
                 if let released = formattedReleaseDate {
                     infoRow("lc.flek.about.released".loc, released)
+                }
+                if let upstreamVersion {
+                    infoRow("lc.flek.about.liveContainer".loc, upstreamVersion)
                 }
                 if let build {
                     infoRow("lc.flek.about.build".loc, build)

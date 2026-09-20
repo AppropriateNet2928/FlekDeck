@@ -137,9 +137,14 @@ static void SSInstallVersionWindow(UIWindowScene *windowScene)
     }
     
     
-    NSString* LCVersion = [NSString stringWithFormat:@"%@-%@",
-                         NSUserDefaults.lcMainBundle.infoDictionary[@"CFBundleShortVersionString"],
-                         NSUserDefaults.lcMainBundle.infoDictionary[@"LCVersionInfo"]];
+    // CFBundleShortVersionString is FlekDeck's own version, so the LiveContainer
+    // release goes in the "LC" slot and FlekDeck's is reported as FD alongside it.
+    NSDictionary* mainInfo = NSUserDefaults.lcMainBundle.infoDictionary;
+    NSString* upstreamVersion = mainInfo[@"LCUpstreamVersion"] ?: @"?";
+    NSString* LCVersion = [NSString stringWithFormat:@"%@, FD %@-%@",
+                         upstreamVersion,
+                         mainInfo[@"CFBundleShortVersionString"],
+                         mainInfo[@"LCVersionInfo"]];
     
     NSString* SSVersion = [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
     

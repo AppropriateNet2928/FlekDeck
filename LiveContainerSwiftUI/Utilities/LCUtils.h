@@ -44,6 +44,8 @@ uint32_t dyld_get_sdk_version(const struct mach_header* mh);
 + (NSString *)appUrlScheme;
 + (NSString *)storeInstallURLScheme;
 + (NSString *)getVersionInfo;
+// The upstream LiveContainer release this build carries, or nil if unrecorded.
++ (NSString *)getUpstreamVersion;
 + (NSString *)liveProcessBundleIdentifier;
 + (NSData*)bookmarkForURL:(NSURL*) url;
 @end
