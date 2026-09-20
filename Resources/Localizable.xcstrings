@@ -8765,6 +8765,17 @@
         }
       }
     },
+    "lc.appSettings.selected32BitEmulator" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "32-bit emulator"
+          }
+        }
+      }
+    },
     "lc.appSettings.selectExternalStorage" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -17566,6 +17577,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Entitlement 文件"
+          }
+        }
+      }
+    },
+    "lc.jielessDiag.entitlement.liveProcess" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LiveProcess Entitlements"
           }
         }
       }
@@ -28310,6 +28332,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rotation Overlay"
+          }
+        }
+      }
+    },
+    "lc.settings.selected32BitEmulator" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Default 32-bit emulator"
           }
         }
       }

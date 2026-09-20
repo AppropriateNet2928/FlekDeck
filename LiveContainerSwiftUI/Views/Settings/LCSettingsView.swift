@@ -91,9 +91,7 @@ struct LCSettingsView: View {
     
     @AppStorage("LCLoadTweaksToSelf") var injectToLCItelf = false
     @AppStorage("LCIgnoreJITOnLaunch") var ignoreJITOnLaunch = false
-    #if is32BitSupported
-    @AppStorage("selected32BitLayer", store: LCUtils.appGroupUserDefault) var liveExec32Path : String = ""
-    #endif
+    @AppStorage("LCSelected32BitEmulator", store: LCUtils.appGroupUserDefault) var selected32BitEmulator : String = ""
     @AppStorage("LCKeepSelectedWhenQuit") var keepSelectedWhenQuit = false
     @AppStorage("LCWaitForDebugger") var waitForDebugger = false
     @AppStorage("LCSharePrivateDataWithLiveProcess") var sharePrivateDataWithLiveProcess = false
@@ -687,6 +685,19 @@ struct LCSettingsView: View {
                                 .multilineTextAlignment(.trailing)
                         }
                         #endif
+                        // Upstream puts this picker in its own section at the root of
+                        // Settings. FlekDeck's root is a list of categories, so it lives
+                        // here instead, and only once an emulator is actually installed.
+                        if !sharedModel.arm32EmuApps.isEmpty {
+                            Picker(selection: $selected32BitEmulator) {
+                                Text("lc.common.none".loc).tag("")
+                                ForEach(sharedModel.arm32EmuApps, id: \.self) { app in
+                                    Text(app.appInfo.displayName()).tag(app.appInfo.relativeBundlePath!)
+                                }
+                            } label: {
+                                Text("lc.settings.selected32BitEmulator".loc)
+                            }
+                        }
                     } header: {
                         Text("Developer Settings")
                     } footer: {

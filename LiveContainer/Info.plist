@@ -36,11 +36,11 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>3.8.7</string>
+	<string>3.8.10</string>
 	<!-- Release date of the version above, shown on the About and License
 	     page in Settings. Bump it together with the version. -->
 	<key>LCReleaseDate</key>
-	<string>2026-08-22</string>
+	<string>2026-09-20</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
 	<key>CFBundleURLTypes</key>
@@ -55,7 +55,7 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>3.8.7</string>
+	<string>3.8.10</string>
 	<key>GCSupportedGameControllers</key>
 	<array>
 		<dict>
