@@ -322,7 +322,8 @@ static void lcTellAppNotFloating(void);
 static void lcTellAppFloating(void);
 static void lcReportVideoReady(id controller);
 static void lcFloatNow(const char *why, BOOL mayFloatWholeWindow);
-static void lcStartWatchingVideoSize(void);
+static void lcUpdateFloatEligibility(void);
+static BOOL lcAppWouldFloat(void);
 static void lcUnpublishVideoContext(void);
 static BOOL gAppBelievesItIsFloating;
 /// Whether the user wants playback running, which only the PiP window's play and
@@ -735,6 +736,36 @@ static void lcHandleSkip(int64_t deciseconds) {
     lcPublishPlaybackState();
 }
 
+/// Sends the host the shape of the video it could float, or zeroes to say there
+/// is nothing to float after all.
+static int gVideoReadyToken = NOTIFY_TOKEN_INVALID;
+static void lcSendVideoSize(CGSize size) {
+    static CGSize lastSent = {-1, -1};
+    if(!gVideoReadyName || CGSizeEqualToSize(size, lastSent)) return;
+    if(gVideoReadyToken == NOTIFY_TOKEN_INVALID) {
+        int token = 0;
+        if(notify_register_check(gVideoReadyName.UTF8String, &token) != NOTIFY_STATUS_OK) return;
+        gVideoReadyToken = token;
+    }
+    lastSent = size;
+    uint64_t w = (uint64_t)MIN(MAX((int)size.width, 0), 0xFFFF);
+    uint64_t h = (uint64_t)MIN(MAX((int)size.height, 0), 0xFFFF);
+    notify_set_state(gVideoReadyToken, w | (h << 16));
+    notify_post(gVideoReadyName.UTF8String);
+    NSLog(@"[LCGuestPiP] video %s, %dx%d", (w && h) ? "ready" : "withdrawn",
+          (int)size.width, (int)size.height);
+}
+
+/// Tells the host this guest has nothing it may float, so the host lets go of the
+/// window it was keeping armed. Sent when the app's own Picture in Picture switch
+/// is off, and the app has therefore asked for none of this.
+static void lcWithdrawVideo(void) {
+    lcSendVideoSize(CGSizeZero);
+}
+
+/// How many times running the video has failed to turn up where it was last seen.
+static int gMissedMeasurements = 0;
+
 /// Tells the host this guest has a video it could float, and what shape it is.
 ///
 /// A measurement and nothing more. Publishing the video moves the app's layer out
@@ -742,43 +773,48 @@ static void lcHandleSkip(int64_t deciseconds) {
 /// there — but the host has to know the shape well in advance, because AVKit can
 /// only start a controller that already existed when the app backgrounded. So the
 /// controller is armed now and the context id follows at the last moment.
-static int gVideoReadyToken = NOTIFY_TOKEN_INVALID;
 static void lcReportVideoReady(id controller) {
-    if(!gVideoReadyName || !controller) return;
     // Never while the video is published: the picture layer is out of the app's
     // tree for the duration, so the search below finds nothing and the fallback
     // measures the container instead — a square, where the video is 16:9. The
     // host would resize the armed window to that, and a resize landing just
     // before the user leaves is a window of the wrong shape or none at all.
     if(gBorrowedLayer) return;
+
+    CGSize size = CGSizeZero;
     @try {
-        id contentSource = [controller valueForKey:@"contentSource"];
+        id contentSource = controller ? [controller valueForKey:@"contentSource"] : nil;
         id sourceLayer = contentSource ? [contentSource valueForKey:@"sampleBufferDisplayLayer"] : nil;
-        if(!sourceLayer) return;
         // Only a real picture layer is worth reporting. Falling back to the outer
         // layer reports the shape of the app's container, which is not the shape
         // of anything anyone wants to look at.
-        id videoLayer = lcFindVideoLayer(sourceLayer);
-        if(!videoLayer) return;
-        CGRect (*getBounds)(id, SEL) = (CGRect (*)(id, SEL))objc_msgSend;
-        CGSize size = getBounds(videoLayer, @selector(bounds)).size;
-        if(size.width < 1 || size.height < 1) return;
-
-        static CGSize lastReported = {0, 0};
-        if(CGSizeEqualToSize(size, lastReported)) return;
-        lastReported = size;
-
-        if(gVideoReadyToken == NOTIFY_TOKEN_INVALID) {
-            int token = 0;
-            if(notify_register_check(gVideoReadyName.UTF8String, &token) != NOTIFY_STATUS_OK) return;
-            gVideoReadyToken = token;
+        id videoLayer = sourceLayer ? lcFindVideoLayer(sourceLayer) : nil;
+        if(videoLayer) {
+            CGRect (*getBounds)(id, SEL) = (CGRect (*)(id, SEL))objc_msgSend;
+            size = getBounds(videoLayer, @selector(bounds)).size;
         }
-        uint64_t w = (uint64_t)MIN(MAX((int)size.width, 0), 0xFFFF);
-        uint64_t h = (uint64_t)MIN(MAX((int)size.height, 0), 0xFFFF);
-        notify_set_state(gVideoReadyToken, w | (h << 16));
-        notify_post(gVideoReadyName.UTF8String);
-        NSLog(@"[LCGuestPiP] video ready, %dx%d", (int)size.width, (int)size.height);
     } @catch(NSException *exception) {
+    }
+
+    if(size.width >= 1 && size.height >= 1) {
+        gMissedMeasurements = 0;
+        lcSendVideoSize(size);
+        return;
+    }
+
+    // Nothing there to measure. Given a long grace period rather than reported
+    // at once, because a player between videos — or going into an ad — loses its
+    // picture layer for a while, and withdrawing on that would take the armed
+    // window down and then build a fresh one, which is the exact sequence that
+    // used to make floating unreliable. Ten seconds of nothing is a player that
+    // is finished, not one in a transition.
+    //
+    // Worth doing for the toggle's sake too: a tweak that reads its PiP setting
+    // deeper than AVKit gives no NO to follow, and what it leaves behind is the
+    // controller tracked here belonging to a player that has gone, with no
+    // picture in it. That is the same observation by another route.
+    if(++gMissedMeasurements >= 10) {
+        lcWithdrawVideo();
     }
 }
 
@@ -795,8 +831,95 @@ static void lcStartWatchingVideoSize(void) {
     lcReportVideoReady(gAppController);
     if(gSizeTimer) return;
     gSizeTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *timer) {
+        // Asked again every time rather than only when a setter is called: the
+        // app may have said its piece about this controller before it was the one
+        // being tracked, and the answer belongs to the controller.
+        if(!lcAppWouldFloat()) {
+            lcUpdateFloatEligibility();
+            return;
+        }
         lcReportVideoReady(gAppController);
     }];
+}
+
+static void lcStopWatchingVideoSize(void) {
+    [gSizeTimer invalidate];
+    gSizeTimer = nil;
+}
+
+/// Whether the app's own Picture in Picture is switched on.
+///
+/// Several tweaked builds of YouTube put PiP behind a setting of their own, and
+/// with it off the app is not asking for any of this — but the float happened
+/// anyway, because the host was armed once at the start of playback and nothing
+/// ever told it to stand down. So both of AVKit's app-facing switches are
+/// followed: `allowsPictureInPicturePlayback` is where such a toggle usually
+/// lands, and automatic PiP is the request the arming was built on in the first
+/// place.
+///
+/// The allowance is kept on the controller rather than in a variable of its own,
+/// because an app has one per player and they come and go. Read off whichever
+/// controller is the one being tracked, so a player being torn down cannot
+/// answer for the player now on screen.
+static const void *kAllowsPiPKey = &kAllowsPiPKey;
+static BOOL gAppWantsAutoPiP = NO;
+
+static BOOL lcAppAllowsPiP(void) {
+    if(!gAppController) return NO;
+    // Absent means the app never said, and AVKit's own default is to allow it.
+    NSNumber *allowed = objc_getAssociatedObject(gAppController, kAllowsPiPKey);
+    return allowed ? allowed.boolValue : YES;
+}
+
+/// Whether the tweak that gave this app Picture in Picture would itself have
+/// floated the video on the app being dismissed.
+///
+/// AVKit's switches above are not enough on their own. YouPiP — the PiP tweak
+/// inside every tweaked YouTube build, YTLite included — decides this in its own
+/// replacement of `-[YTPlayerPIPController appWillResignActive:]`, and simply
+/// declines to call the original. AVKit is never told, the controller stays set
+/// up, its video keeps playing, and nothing observable from this side changes. So
+/// the same preferences it reads are read here.
+///
+/// Its rule, from that replacement: dismissing the app activates PiP when
+/// "Unrestricted PiP Activation" is on, or when neither of the two PiP button
+/// options is — a button being the chosen route means dismissing the app is not
+/// one. Its master switch is checked first, and its own settings note that a
+/// restart is required for that one; read live here, so turning it off stops the
+/// float straight away rather than at the next launch.
+///
+/// An absent master switch means this is not such a build and there is no opinion
+/// to follow, so everything else is left exactly as it was.
+static BOOL lcTweakWouldFloatOnLeaving(void) {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    id enabled = [defaults objectForKey:@"YouPiPEnabled"];
+    if(!enabled) return YES;
+    if(![enabled boolValue]) return NO;
+    if([defaults boolForKey:@"PiPAllActivationMethodKey"]) return YES;
+    return !([defaults boolForKey:@"PiPActivationMethodKey"] ||
+             [defaults boolForKey:@"PiPActivationMethod2Key"]);
+}
+
+/// Whether the app would have floated this video by itself, had its request not
+/// been swallowed. What the automatic floats follow.
+static BOOL lcAppWouldFloat(void) {
+    return gAppWantsAutoPiP && lcAppAllowsPiP() && lcTweakWouldFloatOnLeaving();
+}
+
+/// Follows the switches: arms the host while the app would have floated by itself,
+/// and takes the arming away again when it would not.
+static void lcUpdateFloatEligibility(void) {
+    if(lcAppWouldFloat()) {
+        gMissedMeasurements = 0;
+        lcStartWatchingVideoSize();
+        return;
+    }
+    if(gSizeTimer) {
+        NSLog(@"[LCGuestPiP] not floating by itself (automatic %d, allowed %d, tweak %d); standing down",
+              gAppWantsAutoPiP, lcAppAllowsPiP(), lcTweakWouldFloatOnLeaving());
+    }
+    lcStopWatchingVideoSize();
+    lcWithdrawVideo();
 }
 
 #pragma mark - Telling the app it is floating
@@ -855,6 +978,19 @@ static void lcTellAppNotFloating(void) {
 /// it either.
 static void lcFloatNow(const char *why, BOOL mayFloatWholeWindow) {
     if(gAppBelievesItIsFloating || gBorrowedLayer || !gAppController) return;
+    // Floating without being asked follows the app's own switch. Checked here as
+    // well as where the host is armed, because the host's idea of this window can
+    // be a moment out of date — a toggle turned off while the user was already on
+    // their way out would otherwise float one last time.
+    //
+    // The button is exempt: an app only calls -startPictureInPicture when its own
+    // PiP is on, and that call is the user pressing the thing.
+    if(!mayFloatWholeWindow && !lcAppWouldFloat()) {
+        NSLog(@"[LCGuestPiP] not floating (%s): the app would not have either "
+              "(automatic %d, allowed %d, tweak %d)", why,
+              gAppWantsAutoPiP, lcAppAllowsPiP(), lcTweakWouldFloatOnLeaving());
+        return;
+    }
     uint64_t payload = lcVideoPayload(gAppController);
     NSLog(@"[LCGuestPiP] floating (%s): context %u, %ux%u", why,
           (uint32_t)payload, (uint32_t)((payload >> 32) & 0xFFFF), (uint32_t)((payload >> 48) & 0xFFFF));
@@ -944,7 +1080,21 @@ static void lc_setCanStartAutomatically(id self, SEL _cmd, BOOL value) {
     // start a controller that already existed when the app backgrounded, and the
     // wrong one armed is why leaving FlekDeck floated the whole window.
     gAppController = self;
-    if(value) lcStartWatchingVideoSize();
+    gAppWantsAutoPiP = value;
+    lcUpdateFloatEligibility();
+}
+
+static void (*orig_setAllowsPiPPlayback)(id, SEL, BOOL);
+static void lc_setAllowsPiPPlayback(id self, SEL _cmd, BOOL value) {
+    // Passed through untouched, unlike the two above: this one is the app's own
+    // business. It is where a tweak's "Picture in Picture" toggle lands, and the
+    // app's player reads it back to decide whether to offer PiP at all, so
+    // changing it would be overruling a setting the user just chose.
+    if(orig_setAllowsPiPPlayback) {
+        orig_setAllowsPiPPlayback(self, _cmd, value);
+    }
+    objc_setAssociatedObject(self, kAllowsPiPKey, @(value), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if(self == gAppController) lcUpdateFloatEligibility();
 }
 
 static void (*orig_setShouldStartWhenEnteringBackground)(id, SEL, BOOL);
@@ -992,9 +1142,11 @@ static void lcInstallControllerHooks(void) {
                                   (IMP)lc_setCanStartAutomatically, &orig_setCanStartAutomatically);
     bool active = lcHookMethod(controllerClass, @selector(isPictureInPictureActive),
                                (IMP)lc_isPictureInPictureActive, &orig_isPictureInPictureActive);
+    bool allows = lcHookMethod(controllerClass, @selector(setAllowsPictureInPicturePlayback:),
+                               (IMP)lc_setAllowsPiPPlayback, &orig_setAllowsPiPPlayback);
 
-    NSLog(@"[LCGuestPiP] controller hooks installed (start=%d stop=%d automatic=%d active=%d)",
-          start, stop, automatic, active);
+    NSLog(@"[LCGuestPiP] controller hooks installed (start=%d stop=%d automatic=%d active=%d allows=%d)",
+          start, stop, automatic, active, allows);
 }
 
 // Pegasus arrives with AVKit rather than on its own, but it is a separate image

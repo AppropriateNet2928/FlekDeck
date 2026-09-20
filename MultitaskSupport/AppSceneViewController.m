@@ -904,7 +904,19 @@ static UIDeviceOrientation LCDeviceOrientationForInterface(UIInterfaceOrientatio
 /// The guest has a video and has said how big it is, long before anything floats.
 /// Re-arms, so the controller standing ready is the video-shaped one.
 - (void)handleGuestVideoReady:(CGSize)size {
-    if(size.width < 1 || size.height < 1) return;
+    // Zeroes withdraw it again: the app's own Picture in Picture switch has been
+    // turned off, or the player the measurement came from has finished. Several
+    // tweaked builds of YouTube put PiP behind a setting, and a window still armed
+    // after it is switched off floats a video the user asked not to have.
+    if(size.width < 1 || size.height < 1) {
+        if(!self.guestHasVideo) return;
+        NSLog(@"[LC] %@ has no video to float any more", self.bundleId);
+        self.guestHasVideo = NO;
+        self.guestVideoSize = CGSizeZero;
+        self.guestVideoRect = CGRectZero;
+        [PiPManager.shared disarmIfInactiveForVC:self];
+        return;
+    }
     if(self.guestHasVideo && CGSizeEqualToSize(self.guestVideoSize, size)) return;
     NSLog(@"[LC] %@ has a video, %dx%d", self.bundleId, (int)size.width, (int)size.height);
     self.guestHasVideo = YES;
