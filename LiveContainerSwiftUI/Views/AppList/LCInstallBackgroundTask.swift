@@ -80,26 +80,44 @@ private final class LCInstallBackgroundTaskManager {
     private var itemIDs: [String: UUID] = [:]
     private var queueObserver: AnyCancellable?
 
+    /// The wildcard added to the in-memory Info.plist, if one had to be. Reported
+    /// with every outcome: a signed entry that happens to match proves nothing about
+    /// the runtime path, which is the one every other user depends on.
+    private var addedAtRuntime: String?
+
     private static var permittedIdentifiers: [String] {
         Bundle.main.object(forInfoDictionaryKey: "BGTaskSchedulerPermittedIdentifiers") as? [String] ?? []
     }
 
-    /// The prefix every submitted identifier is composed from, applying the two
-    /// rules the scheduler itself applies to `BGTaskSchedulerPermittedIdentifiers`:
-    /// an entry has to end in `.*`, and the *running* bundle identifier has to be a
-    /// prefix of it. The second is the one that bites. The entry is substituted at
-    /// build time from `PRODUCT_BUNDLE_IDENTIFIER`, but the app ships re-signed
-    /// under the distribution identity, and an entry that doesn't prefix-match the
-    /// identifier the app is actually running as is dropped — leaving no base to
-    /// compose against, and every registration refused with no other symptom. The
-    /// Info.plist therefore lists one entry per identity the app ships under, and
-    /// this picks whichever one fits the running build. The scheduler turns `a.b.*`
-    /// into the base `a.b.` and prefix-matches; mirror that exactly.
-    private static func identifierPrefix(for bundleID: String) -> String? {
-        guard let wildcard = permittedIdentifiers.first(where: {
-            $0.hasSuffix(".*") && $0.hasPrefix(bundleID)
-        }) else { return nil }
-        return wildcard.replacingOccurrences(of: ".*", with: ".")
+    /// The wildcard this install composes its identifier under.
+    ///
+    /// The scheduler applies two rules to `BGTaskSchedulerPermittedIdentifiers`: an
+    /// entry has to end in `.*`, and the *running* bundle identifier has to be a
+    /// prefix of it. The second is the one that bites. Every user's copy is re-signed
+    /// under a bundle ID of its own, so the entry built in from
+    /// `PRODUCT_BUNDLE_IDENTIFIER` only ever fits a build run from Xcode, and an
+    /// entry that doesn't fit is dropped — leaving nothing to compose against and
+    /// every registration refused, with no other symptom.
+    ///
+    /// So when no signed entry fits, `<bundle ID>.install.*` is added to the
+    /// in-memory Info.plist, which is where the scheduler reads the list from (see
+    /// LCPermittedTaskIdentifier.m). This runs before any registration, and has to:
+    /// the scheduler reads the list once, on the first one, and keeps it.
+    private func permittedWildcard(for bundleID: String, failure: inout String?) -> String? {
+        if let signed = Self.permittedIdentifiers.first(where: { $0.hasSuffix(".*") && $0.hasPrefix(bundleID) }) {
+            return signed
+        }
+        guard !bundleID.isEmpty else {
+            failure = "no bundle identifier"
+            return nil
+        }
+        let wildcard = bundleID + ".install.*"
+        if let reason = LCPermitBackgroundTaskIdentifier(wildcard) {
+            failure = reason
+            return nil
+        }
+        addedAtRuntime = wildcard
+        return wildcard
     }
 
     /// Both halves of that rule, for the diagnostics row — a refusal is unreadable
@@ -116,10 +134,15 @@ private final class LCInstallBackgroundTaskManager {
     func begin(for item: InstallItem) {
         guard entries[item.id] == nil else { return }
         let bundleID = Bundle.main.bundleIdentifier ?? ""
-        guard let prefix = Self.identifierPrefix(for: bundleID) else {
-            LCInstallBackgroundTask.record("No permitted identifier", detail: Self.inputs(for: bundleID))
+        var failure: String?
+        guard let wildcard = permittedWildcard(for: bundleID, failure: &failure) else {
+            LCInstallBackgroundTask.record("No permitted identifier",
+                                           detail: "\(failure ?? "none fits") · \(Self.inputs(for: bundleID))")
             return
         }
+        // The scheduler turns `a.b.*` into the base `a.b.` and prefix-matches.
+        let prefix = wildcard.replacingOccurrences(of: ".*", with: ".")
+        let permittedBy = wildcard == addedAtRuntime ? "permitted at runtime" : "signed into Info.plist"
         // The scheduler only takes a submission made from the foreground on behalf
         // of something the user just did. An install kicked off by a URL the app was
         // launched with doesn't qualify; skipping it is the whole handling needed.
@@ -144,7 +167,7 @@ private final class LCInstallBackgroundTaskManager {
         }
         guard registered else {
             LCInstallBackgroundTask.record("Registration refused",
-                                           detail: "\(identifier) · \(Self.inputs(for: bundleID))")
+                                           detail: "\(identifier) · \(permittedBy) · \(Self.inputs(for: bundleID))")
             return
         }
 
@@ -161,7 +184,7 @@ private final class LCInstallBackgroundTaskManager {
         request.strategy = .queue
         do {
             try BGTaskScheduler.shared.submit(request)
-            LCInstallBackgroundTask.record("Submitted", detail: identifier)
+            LCInstallBackgroundTask.record("Submitted", detail: "\(identifier) · \(permittedBy)")
             startObservingQueue()
         } catch {
             let nsError = error as NSError
