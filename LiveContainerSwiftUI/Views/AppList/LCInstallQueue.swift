@@ -42,6 +42,13 @@ final class InstallItem: Identifiable, Equatable {
     var phase: InstallPhase = .queued
     /// Download progress 0…1
     var downloadProgress: Double = 0
+    /// Bytes received and expected. `totalBytes` stays 0 when the server sends no
+    /// length, and `downloadProgress` with it.
+    var downloadedBytes: Int64 = 0
+    var totalBytes: Int64 = 0
+    /// The name inside the bundle, once extraction has read it — the first real
+    /// name a hand-started install has.
+    var resolvedName: String?
     /// Install (decompress + sign) progress 0…1
     var installProgress: Double = 0
 
@@ -334,9 +341,13 @@ final class LCInstallQueue: ObservableObject {
         // Observe download progress via Combine
         item.progressCancellable = helper.$downloadProgress
             .receive(on: DispatchQueue.main)
-            .sink { [weak self, weak item] progress in
+            .sink { [weak self, weak item, weak helper] progress in
                 guard let self, let item else { return }
                 item.downloadProgress = Double(progress)
+                if let helper {
+                    item.downloadedBytes = helper.downloadedSize
+                    item.totalBytes = helper.totalSize
+                }
                 self.objectWillChange.send()
             }
 

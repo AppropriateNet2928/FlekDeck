@@ -70,9 +70,25 @@ private final class LCInstallBackgroundTaskManager {
         let identifier: String
         weak var item: InstallItem?
         var task: BGContinuedProcessingTask?
-        /// Last subtitle pushed, so `updateTitle` only fires on a real change.
+        /// What the row last showed, so `updateTitle` only fires on a real change.
+        var title: String?
         var subtitle: String?
+        var phase: InstallPhase?
+        var textUpdatedAt: Date?
     }
+
+    /// The least time between two text changes within one phase. The percentage
+    /// moves every whole percent; the row doesn't need to redraw faster than this
+    /// to read as live, and every update is a round trip to the system.
+    private static let textInterval: TimeInterval = 1
+
+    /// How long a finished row stays up showing "Installed" before it goes, so
+    /// the install ends on a visible success instead of the row just vanishing.
+    private static let finishedHold: TimeInterval = 1.5
+
+    /// For a download of unknown size, the byte count at which the bar is about
+    /// two-thirds of the way through its share — roughly a typical IPA.
+    private static let unknownSizeScale: Double = 100_000_000
 
     /// Live tasks keyed by `InstallItem.id`, plus the reverse lookup the launch
     /// handler needs — it's handed back only the identifier it registered with.
@@ -171,13 +187,13 @@ private final class LCInstallBackgroundTaskManager {
             return
         }
 
-        entries[item.id] = Entry(identifier: identifier, item: item, task: nil, subtitle: nil)
+        entries[item.id] = Entry(identifier: identifier, item: item)
         itemIDs[identifier] = item.id
 
         let request = BGContinuedProcessingTaskRequest(
             identifier: identifier,
             title: Self.title(for: item),
-            subtitle: Self.subtitle(for: item)
+            subtitle: Self.subtitle(for: item, fraction: Self.fraction(for: item))
         )
         // .queue rather than .fail: the install runs either way, so a task that only
         // gets going once the system has room for it is still worth having.
@@ -257,25 +273,56 @@ private final class LCInstallBackgroundTaskManager {
     private func update(_ item: InstallItem) {
         guard let entry = entries[item.id], let task = entry.task else { return }
         // Accurate progress isn't cosmetic: the system expires tasks that look
-        // stalled before it expires ones that are visibly moving.
-        let fraction = item.installState.fraction
+        // stalled before it expires ones that are visibly moving. The bar and the
+        // percentage in the text come from the same number, so they always agree.
+        let fraction = Self.fraction(for: item)
         task.progress.completedUnitCount = Int64((fraction * Double(Self.progressUnits)).rounded())
 
-        let subtitle = Self.subtitle(for: item)
-        guard subtitle != entry.subtitle else { return }
+        let title = Self.title(for: item)
+        let subtitle = Self.subtitle(for: item, fraction: fraction)
+        guard title != entry.title || subtitle != entry.subtitle else { return }
+        // A new phase shows at once; within one, the text keeps to textInterval.
+        let now = Date()
+        if item.phase == entry.phase, let last = entry.textUpdatedAt,
+           now.timeIntervalSince(last) < Self.textInterval {
+            return
+        }
+        entries[item.id]?.title = title
         entries[item.id]?.subtitle = subtitle
-        task.updateTitle(Self.title(for: item), subtitle: subtitle)
+        entries[item.id]?.phase = item.phase
+        entries[item.id]?.textUpdatedAt = now
+        task.updateTitle(title, subtitle: subtitle)
+    }
+
+    private static func fraction(for item: InstallItem) -> Double {
+        let state = item.installState
+        guard item.phase == .downloading, item.totalBytes <= 0 else {
+            return min(max(state.fraction, 0), 1)
+        }
+        // The server never said how big the file is, so there's nothing to divide
+        // by — and a bar parked at zero reads as stalled, which the system expires
+        // first. Move it along a curve that never reaches the end of the download's
+        // share (the 0.8 `installState` gives it) and let the text carry the exact
+        // byte count instead of a percentage.
+        let guess = 1 - exp(-Double(item.downloadedBytes) / unknownSizeScale)
+        return 0.8 * guess
     }
 
     // MARK: Finishing
 
     private func end(itemID: UUID, success: Bool) {
         guard let entry = entries[itemID] else { return }
-        let hadTask = entry.task != nil
         forget(itemID: itemID)
-        entry.task?.setTaskCompleted(success: success)
-        if hadTask {
-            LCInstallBackgroundTask.record(success ? "Finished" : "Install failed")
+        guard let task = entry.task else { return }
+        LCInstallBackgroundTask.record(success ? "Finished" : "Install failed")
+        guard success else {
+            task.setTaskCompleted(success: false)
+            return
+        }
+        task.progress.completedUnitCount = task.progress.totalUnitCount
+        task.updateTitle(entry.title ?? task.title, subtitle: "lc.flek.installed".loc)
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.finishedHold) {
+            task.setTaskCompleted(success: true)
         }
     }
 
@@ -306,28 +353,58 @@ private final class LCInstallBackgroundTaskManager {
 
     // MARK: Text shown by the system
 
+    /// The app's name as the rest of the app shows it: a rename chosen on its page,
+    /// else the catalog's name, else the name read from the bundle once it's
+    /// extracted, else the file name of a hand-picked IPA.
     private static func title(for item: InstallItem) -> String {
-        if let name = item.name, !name.isEmpty {
-            return name
+        let candidates = [item.overrides?.displayName, item.name, item.resolvedName, fileName(of: item)]
+        for candidate in candidates {
+            if let name = candidate?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+                return name
+            }
         }
         return "lc.appList.installation".loc
     }
 
-    private static func subtitle(for item: InstallItem) -> String {
+    /// `TikTok_35.2.ipa` → `TikTok_35.2`. Only for an actual .ipa: a download URL
+    /// that ends in something like `download?id=4` names nothing.
+    private static func fileName(of item: InstallItem) -> String? {
+        guard let url = URL(string: item.url) else { return nil }
+        let pathExtension = url.pathExtension.lowercased()
+        guard pathExtension == "ipa" || pathExtension == "tipa" else { return nil }
+        let name = url.deletingPathExtension().lastPathComponent
+        return name.removingPercentEncoding ?? name
+    }
+
+    /// Phase, then the same percentage the bar shows. While downloading, the size
+    /// too; when the server never said how big the file is there's no percentage
+    /// to show, so it says how much has arrived instead. Numbers and units come
+    /// from the system formatters, so they read right in every language the phase
+    /// words are already translated into.
+    private static func subtitle(for item: InstallItem, fraction: Double) -> String {
+        let percent = fraction.formatted(.percent.precision(.fractionLength(0)))
         switch item.phase {
         case .queued, .cancelled:
             return "lc.flek.install.waiting".loc
         case .downloading:
-            return "lc.flek.install.downloading".loc
+            let downloading = "lc.flek.install.downloading".loc
+            guard item.totalBytes > 0 else {
+                return "\(downloading) \(byteCount(item.downloadedBytes))"
+            }
+            return "\(downloading) \(percent) · \(byteCount(item.totalBytes))"
         case .waitingForInstall:
             return "lc.flek.install.preparing".loc
         case .installing:
-            return "lc.flek.installing".loc
+            return "\("lc.flek.installing".loc) \(percent)"
         case .completed:
             return "lc.flek.installed".loc
         case .failed:
             return "lc.flek.installFailedGeneric".loc
         }
+    }
+
+    private static func byteCount(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 }
 

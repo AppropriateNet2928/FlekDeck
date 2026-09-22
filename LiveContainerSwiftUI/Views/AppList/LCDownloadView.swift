@@ -92,7 +92,9 @@ class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
-        let progress = Float(totalBytesWritten) / Float(totalBytesExpectedToWrite)
+        // -1 (NSURLSessionTransferSizeUnknown) when the server sends no length;
+        // dividing by it made progress negative.
+        let progress = totalBytesExpectedToWrite > 0 ? Float(totalBytesWritten) / Float(totalBytesExpectedToWrite) : 0
         progressCallback(progress, totalBytesWritten, totalBytesExpectedToWrite)
     }
 

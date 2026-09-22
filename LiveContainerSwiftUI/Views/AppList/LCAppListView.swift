@@ -1856,6 +1856,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
         guard let newAppInfo = LCAppInfo(bundlePath: appFolderPath.path) else {
             throw "lc.appList.infoPlistCannotReadError".loc
         }
+        item.resolvedName = newAppInfo.displayName()
 
         // A bundle ID chosen on the app's page. Goes through LCAppInfo rather
         // than the plist directly, so the original is recorded the way
