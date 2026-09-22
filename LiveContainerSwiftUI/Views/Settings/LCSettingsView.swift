@@ -95,6 +95,7 @@ struct LCSettingsView: View {
     @AppStorage("LCKeepSelectedWhenQuit") var keepSelectedWhenQuit = false
     @AppStorage("LCWaitForDebugger") var waitForDebugger = false
     @AppStorage("LCSharePrivateDataWithLiveProcess") var sharePrivateDataWithLiveProcess = false
+    @AppStorage("LCOpenPrivateAppsWithoutCopying") var openPrivateAppsWithoutCopying = false
     @AppStorage("BKNoWatchdogs") var disableLiveProcessWatchdog = false
     
     ///Flekstore user defaults
@@ -653,6 +654,14 @@ struct LCSettingsView: View {
                         }
                         Toggle(isOn: $sharePrivateDataWithLiveProcess) {
                             Text("Allow Private Data access from LiveProcess")
+                        }
+                        // Hands a private app to its window through bookmarks, as
+                        // upstream does, instead of staging a copy into the app
+                        // group. There to test whether bookmarks open on a given
+                        // build and iOS version; see "App group staging" in
+                        // AppSceneViewController.m.
+                        Toggle(isOn: $openPrivateAppsWithoutCopying) {
+                            Text("Open Private Apps in Windows Without Copying")
                         }
                         Toggle(isOn: $disableLiveProcessWatchdog) {
                             Text("Disable LiveProcess watchdog termination")

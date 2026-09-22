@@ -65,19 +65,40 @@ int LiveProcessMain(int argc, char *argv[]) {
     [lcUserDefaults setObject:appInfo[@"launchAppUrlScheme"] forKey:@"launchAppUrlScheme"];
     [lcUserDefaults setObject:appInfo[@"selected"] forKey:@"selected"];
     [lcUserDefaults setObject:appInfo[@"selectedContainer"] forKey:@"selectedContainer"];
+    // How the host handed over a private app: staged into its folder in the app
+    // group, or through the bookmarks below. Written on every launch, so a nil
+    // clears what the previous launch left.
+    [lcUserDefaults setObject:appInfo[@"stagingPath"] forKey:@"LCStagingPath"];
+    [lcUserDefaults setObject:appInfo[@"privateAppViaAccessPasses"] forKey:@"LCPrivateAppViaAccessPasses"];
     
     bool access = false;
     NSArray* bookmarks = appInfo[@"bookmarks"];
     NSMutableArray<NSURL *>* bookmarkedUrls = [NSMutableArray array];
     for(int i = 0; i < bookmarks.count; i++) {
-        bool isStale = false;
-        NSError* error = nil;
-        NSURL *url = [NSURL URLByResolvingBookmarkData:bookmarks[i] options:(1<<10) relativeToURL:nil bookmarkDataIsStale:&isStale error:&error];
+        // With the security scope first and, if that gives no access, without
+        // it, which is how upstream resolves them. Every attempt is logged:
+        // whether these open at all on a given iOS version is what the "Open
+        // Private Apps in Windows Without Copying" developer switch finds out.
+        const NSURLBookmarkResolutionOptions attempts[] = {(1<<10), 0};
+        NSURL *url = nil;
+        bool granted = false;
+        for(int a = 0; a < 2 && !granted; a++) {
+            bool isStale = false;
+            NSError* error = nil;
+            NSURL *resolved = [NSURL URLByResolvingBookmarkData:bookmarks[i] options:attempts[a] relativeToURL:nil bookmarkDataIsStale:&isStale error:&error];
+            if (!resolved) {
+                NSLog(@"[LiveProcess] Bookmark %d did not resolve with options %lu: %@", i, (unsigned long)attempts[a], error);
+                continue;
+            }
+            granted = [resolved startAccessingSecurityScopedResource];
+            NSLog(@"[LiveProcess] Bookmark %d resolved with options %lu, access %s: %@", i, (unsigned long)attempts[a], granted ? "granted" : "refused", resolved.path);
+            if (!url || granted) {
+                url = resolved;
+            }
+        }
         if (url) {
             [bookmarkedUrls addObject:url];
-            access = [url startAccessingSecurityScopedResource];
-        } else {
-            NSLog(@"[LiveProcess] Failed to resolve bookmark %d: %@", i, error);
+            access = granted;
         }
     }
     

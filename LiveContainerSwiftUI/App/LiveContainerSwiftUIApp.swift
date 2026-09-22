@@ -30,6 +30,13 @@ struct LiveContainerSwiftUIApp : SwiftUI.App {
 
         LCPath.clearStaleShareInbox()
 
+        // Before the app list is read. A private app opened in a window is staged
+        // into the app group until the window closes, so a FlekDeck killed with
+        // windows open leaves copies behind, and builds before the staging folder
+        // left them among the shared apps, where they were listed as a second,
+        // shared copy of the app.
+        LCWindowStaging.recoverAfterLaunch()
+
         let fm = FileManager()
         var tempAppDataFolderNames : [String] = []
         var tempTweakFolderNames : [String] = []

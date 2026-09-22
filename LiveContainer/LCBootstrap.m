@@ -325,6 +325,25 @@ static NSString* invokeAppMain(NSString *selectedApp, NSString *selectedContaine
     
     NSURL *appGroupFolder = nil;
     
+    // Where a bundle found outside our own Documents keeps its data and tweaks:
+    // the shared folder for a shared app, or this FlekDeck's staging folder for a
+    // private app copied there to run in a window.
+    NSURL *bundleFilesFolder = nil;
+
+    // FlekDeck: how the host handed over a private app it opened in a window,
+    // staged into its folder in the app group or through bookmarks. Either way the
+    // app is not looked for among the shared apps, where a copy an older build
+    // left behind, or a shared app with the same folder name, would run in its
+    // place. LiveProcess writes both on every launch.
+    NSString *stagingPath = nil;
+    BOOL viaAccessPasses = NO;
+    if(isLiveProcess) {
+        stagingPath = [lcUserDefaults stringForKey:@"LCStagingPath"];
+        viaAccessPasses = [lcUserDefaults boolForKey:@"LCPrivateAppViaAccessPasses"];
+        [lcUserDefaults removeObjectForKey:@"LCStagingPath"];
+        [lcUserDefaults removeObjectForKey:@"LCPrivateAppViaAccessPasses"];
+    }
+
     NSString *bundlePath = 0;
     if(!isSideStore) {
         bundlePath = [NSString stringWithFormat:@"%@/Applications/%@", docPath, selectedApp];
@@ -339,9 +358,13 @@ static NSString* invokeAppMain(NSString *selectedApp, NSString *selectedContaine
 
     // not found locally, let's look for the app in shared folder
     if(!guestAppInfo) {
+        if(viaAccessPasses) {
+            return @"This app's files could not be opened through a bookmark, so it cannot run in a window without being copied.\n\nTurn off \"Open Private Apps in Windows Without Copying\" in FlekDeck's developer settings to open private apps in windows again.";
+        }
         NSURL *appGroupPath = [NSFileManager.defaultManager containerURLForSecurityApplicationGroupIdentifier:[LCSharedUtils appGroupID]];
         appGroupFolder = [appGroupPath URLByAppendingPathComponent:@"LiveContainer"];
-        bundlePath = [NSString stringWithFormat:@"%@/Applications/%@", appGroupFolder.path, selectedApp];
+        bundleFilesFolder = stagingPath ? [appGroupFolder URLByAppendingPathComponent:stagingPath] : appGroupFolder;
+        bundlePath = [NSString stringWithFormat:@"%@/Applications/%@", bundleFilesFolder.path, selectedApp];
         guestAppInfo = [NSDictionary dictionaryWithContentsOfFile:[NSString stringWithFormat:@"%@/LCAppInfo.plist", bundlePath]];
         isSharedBundle = true;
     }
@@ -396,7 +419,7 @@ static NSString* invokeAppMain(NSString *selectedApp, NSString *selectedContaine
     // Setup tweak loader
     NSString *tweakFolder = nil;
     if (isSharedBundle) {
-        tweakFolder = [appGroupFolder.path  stringByAppendingPathComponent:@"Tweaks"];
+        tweakFolder = [bundleFilesFolder.path  stringByAppendingPathComponent:@"Tweaks"];
     } else {
         tweakFolder = [docPath stringByAppendingPathComponent:@"Tweaks"];
     }
@@ -478,7 +501,7 @@ static NSString* invokeAppMain(NSString *selectedApp, NSString *selectedContaine
     } else if (bookmarkURL) {
         newHomePath = bookmarkURL.path;
     } else if(isSharedBundle) {
-        newHomePath = [NSString stringWithFormat:@"%@/Data/Application/%@", appGroupFolder.path, dataUUID];
+        newHomePath = [NSString stringWithFormat:@"%@/Data/Application/%@", bundleFilesFolder.path, dataUUID];
         
     } else {
         newHomePath = [NSString stringWithFormat:@"%@/Data/Application/%@", docPath, dataUUID];

@@ -13,6 +13,18 @@
 
 @class AppSceneViewController;
 
+/// The files a private app is staged into the app group with, for as long as it
+/// runs in a window. Only closing the window brings them back, so a FlekDeck
+/// killed with windows open leaves them behind.
+@interface LCWindowStaging : NSObject
+/// Settles the data containers those windows left staged, keeping whichever copy
+/// holds the later session, and drops the staged bundle and tweak copies. Also
+/// clears the copies builds before the staging folder left among the shared
+/// apps, where they were listed as a second, shared copy of the app. Call once
+/// at launch, before the app list is read.
++ (void)recoverAfterLaunch;
+@end
+
 API_AVAILABLE(ios(16.0))
 @protocol AppSceneViewControllerDelegate <NSObject>
 - (void)appSceneVCAppDidExit:(AppSceneViewController*)vc;
