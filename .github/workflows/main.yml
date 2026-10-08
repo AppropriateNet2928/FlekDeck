@@ -9,9 +9,10 @@ on:
 jobs:
   build:
     runs-on: macos-latest
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Xcode
         uses: maxim-lobanov/setup-xcode@v1
@@ -19,15 +20,19 @@ jobs:
           xcode-version: '26.6.0'
 
       - name: Build and export IPA
-        uses: yukiarrr/ios-build-action@v1.12.0
+        uses: yukiarrr/ios-build-action@v1.13.0
         with:
           project-path: LiveContainer.xcodeproj
           scheme: LiveContainer
           export-method: ad-hoc
           configuration: Release
           output-path: output.ipa
-          p12-base64: ${{ secrets.P12_BASE64 }}
+
+          p12-key-base64: ${{ secrets.P12_KEY_BASE64 }}
+          p12-cer-base64: ${{ secrets.P12_CER_BASE64 }}
+
           mobileprovision-base64: ${{ secrets.MOBILEPROVISION_BASE64 }}
+          certificate-password: ${{ secrets.CERTIFICATE_PASSWORD }}
           code-signing-identity: ${{ secrets.CODE_SIGNING_IDENTITY }}
           team-id: ${{ secrets.TEAM_ID }}
 
