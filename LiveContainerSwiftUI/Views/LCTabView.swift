@@ -17,14 +17,14 @@ struct LCTabView: View {
     
     @State var previousSelectedTab : LCTabIdentifier = .apps
     @State private var isBlocked = false
-    @State private var hasCheckedBlockedStatus = false
+    @State private var hasCheckedBlockedStatus = true
     @State private var didFailBlockedStatusCheck = false
     @State private var didRunPostGateStartup = false
     @State private var isVerifyingAccess = false
     @State private var accessVerificationFailureMessage = "Please check your internet connection and try again."
     @State private var blockedReason = "Unavailable"
     @State private var blockedMessage = "Your access has been limited by the service."
-    @AppStorage("FSEncryptedUDID") private var encryptedUDID: String = ""
+
     
     @EnvironmentObject var sharedModel : SharedModel
     @EnvironmentObject var sceneDelegate: SceneDelegate
@@ -39,19 +39,7 @@ struct LCTabView: View {
     
     var body: some View {
         Group {
-            if !hasCheckedBlockedStatus {
-                ZStack {
-                    Color.black.ignoresSafeArea()
-                    ProgressView()
-                        .tint(.white)
-                }
-            } else if didFailBlockedStatusCheck {
-                AccessVerificationFailedView(message: accessVerificationFailureMessage) {
-                    Task {
-                        await verifyAccess(forceNetworkCheck: true)
-                    }
-                }
-            } else if isBlocked {
+            if isBlocked {
                 AccessBlockedView(reason: blockedReason, message: blockedMessage)
             } else {
                 // FlekDeck: the springboard home screen replaces the old tab bar.
@@ -289,13 +277,19 @@ struct LCTabView: View {
         UserDefaults.standard.set(true, forKey: "LCBundleIdChecked")
     }
     
+    /// Records whether this build carries a development profile.
+    ///
+    /// Upstream treated a missing `get-task-allow` as a hard error, which is
+    /// wrong for anything but a development certificate: enterprise, ad-hoc and
+    /// distribution profiles all set it to false, and SideStore/AltStore installs
+    /// are legitimate configurations rather than misconfigurations. The check is
+    /// kept because JIT-less mode genuinely prefers a development profile, but
+    /// it now records the finding instead of blocking the launch behind a modal.
     func checkGetTaskAllow() {
         let task = SecTaskCreateFromSelf(nil)
-        guard let value = SecTaskCopyValueForEntitlement(task, "get-task-allow" as CFString, nil), (value.takeRetainedValue() as? NSNumber)?.boolValue ?? false else {
-            errorInfo = "lc.settings.notDevCert".loc
-            errorShow = true
-            return
-        }
+        let value = SecTaskCopyValueForEntitlement(task, "get-task-allow" as CFString, nil)
+        let isDevelopmentSigned = (value?.takeRetainedValue() as? NSNumber)?.boolValue ?? false
+        UserDefaults.standard.set(isDevelopmentSigned, forKey: "LCDevelopmentSigned")
     }
     
     private func setupInitialRepositoriesIfNeeded() {
@@ -364,88 +358,12 @@ struct LCTabView: View {
         }
         return
         #endif
-
-        guard let resolvedEncryptedUDID = resolveEncryptedUDID() else {
-            await MainActor.run {
-                accessVerificationFailureMessage = "User UDID is empty. Please contact FlekSt0re tech support."
-                didFailBlockedStatusCheck = true
-                hasCheckedBlockedStatus = true
-            }
-            return
-        }
-
-        let cached = AccessVerdictStore.load(for: resolvedEncryptedUDID)
-
-        // A ban is sticky: it applies with no network at all, so switching the
-        // device offline is not a way around it. The background refresh below is
-        // what lets a lifted ban clear.
-        if let cached, cached.isBanned {
-            await MainActor.run {
-                applyBan(reason: cached.banReason, message: cached.banMessage)
-            }
-            refreshVerdictInBackground(for: resolvedEncryptedUDID)
-            return
-        }
-
-        // A clean verdict opens the app immediately. Inside the refresh interval
-        // the server is not contacted at all; past it we re-check, but in the
-        // background, so a plane or a dead zone never keeps a user out of apps
-        // they have already installed.
-        if let cached, !forceNetworkCheck, cached.isWithinGraceWindow() {
-            await MainActor.run {
-                applyAccessGranted()
-            }
-            if !cached.isFresh() {
-                refreshVerdictInBackground(for: resolvedEncryptedUDID)
-            }
-            return
-        }
-
-        // No usable verdict: a first launch, a new device, or a verdict older
-        // than the grace window. Nothing opens until the server answers.
-        switch await AccessVerificationService.fetchStatus(encryptedUDID: resolvedEncryptedUDID) {
-        case .answered(let response):
-            AccessVerdictStore.save(response, for: resolvedEncryptedUDID)
-            await MainActor.run {
-                if response.isBanned {
-                    applyBan(reason: response.banReason, message: response.message)
-                } else {
-                    applyAccessGranted()
-                }
-            }
-        case .unreachable:
-            await MainActor.run {
-                applyVerificationFailure("Please check your internet connection and try again.")
-            }
-        case .serviceError:
-            await MainActor.run {
-                applyVerificationFailure("FlekSt0re is temporarily unavailable. Please try again in a few minutes.")
-            }
-        }
     }
 
-    /// Re-checks the verdict without blocking the UI. Access has already been
-    /// decided by this point, so a failed check changes nothing — only a
-    /// definite answer from the server does.
-    private func refreshVerdictInBackground(for encryptedUDID: String) {
-        Task {
-            guard case .answered(let response) = await AccessVerificationService.fetchStatus(
-                encryptedUDID: encryptedUDID
-            ) else {
-                return
-            }
-            AccessVerdictStore.save(response, for: encryptedUDID)
+  
 
-            await MainActor.run {
-                if response.isBanned {
-                    applyBan(reason: response.banReason, message: response.message)
-                } else {
-                    applyAccessGranted()
-                    runPostGateStartupIfNeeded()
-                }
-            }
-        }
-    }
+
+   
 
     @MainActor
     private func applyBan(reason: String?, message: String?) {
@@ -492,22 +410,7 @@ struct LCTabView: View {
         processPendingURLIfNeeded()
     }
 
-    private func resolveEncryptedUDID() -> String? {
-        let stored = encryptedUDID.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !stored.isEmpty {
-            return stored
-        }
-
-        if let bundleValue = Bundle.main.infoDictionary?["encryptedUdid"] as? String {
-            let trimmed = bundleValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty {
-                encryptedUDID = trimmed
-                return trimmed
-            }
-        }
-
-        return nil
-    }
+   
 
     private func formatBanReason(_ rawReason: String?) -> String {
         let trimmed = rawReason?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -719,3 +622,4 @@ private enum ScreenEdgeGestureDeferrer {
         }
     }
 }
+
