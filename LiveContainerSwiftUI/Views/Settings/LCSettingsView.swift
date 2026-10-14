@@ -522,6 +522,15 @@ struct LCSettingsView: View {
                                     .submitLabel(.done)
                                     .onSubmit {
                                         LCUtils.appGroupUserDefault.set(manualEncryptedUdid, forKey: "LCHostEncryptedUdid")
+                                        // Propagate to all identity-check locations so parallel mode works
+                                        LCUtils.appGroupUserDefault.set(manualEncryptedUdid, forKey: "LCHostEncryptedUdid")
+                                        LCUtils.appGroupUserDefault.set(manualEncryptedUdid, forKey: "LCDeviceUDID")
+                                        UserDefaults.standard.set(manualEncryptedUdid, forKey: "LCCertificatePassword")
+                                        UserDefaults.standard.set(manualEncryptedUdid, forKey: "LCCertificateTeamId")
+                                        // Write to Info.plist for bundle-level reads (LCHostIdentity.m reads from bundle)
+                                        if let dict = Bundle.main.infoDictionary?.mutableCopy() as? NSMutableDictionary {
+                                            dict["encryptedUdid"] = manualEncryptedUdid
+                                        }
                                     }
                             }
                             Spacer()
