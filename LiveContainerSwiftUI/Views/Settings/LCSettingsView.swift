@@ -877,7 +877,7 @@ struct LCSettingsView: View {
             .alert("lc.common.error".loc, isPresented: $errorShow) { Button("OK") {} }
             message: {
                 let msg = errorInfo
-                Text(msg)
+                Text(errorInfo ?? "")
             }
             .alert("lc.common.success".loc, isPresented: $successShow) { Button("OK") {} }
             message: { Text(successInfo) }
