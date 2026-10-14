@@ -883,8 +883,7 @@ struct LCSettingsView: View {
         errorAlertMessage
      }
 
-            .alert("lc.common.success".loc, isPresented: $successShow) { Button("OK") {} }
-            message: { Text(successInfo) }
+           
             .alert("lc.settings.importCertificate".loc, isPresented: $certificateImportAlert.show) {
                 Button {
                     certificateImportAlert.close(result: true)
