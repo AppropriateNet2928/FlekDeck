@@ -473,17 +473,23 @@ struct LCSettingsView: View {
                                 Text("Multitask UDID")
                                     .font(.body)
 
-                                Text("App: \(publishedEncryptedUdidDisplay)")
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.3)
+                                HStack(spacing: 4) {
+                                    Text("App:")
+                                    Text(publishedEncryptedUdidDisplay)
+                                }
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.3)
 
-                                Text("Guest: \(multitaskIdentityValueDisplay)")
-                                    .font(.subheadline)
-                                    .foregroundColor(multitaskIdentityIsProblem ? .orange : .secondary)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.3)
+                                HStack(spacing: 4) {
+                                    Text("Guest:")
+                                    Text(multitaskIdentityValueDisplay)
+                                }
+                                .font(.subheadline)
+                                .foregroundColor(multitaskIdentityIsProblem ? .orange : .secondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.3)
 
                                 Text(multitaskIdentitySummary)
                                     .font(.caption)
