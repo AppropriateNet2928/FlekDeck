@@ -457,7 +457,8 @@ struct LCSettingsView: View {
                                 Text("Multitask UDID")
                                     .font(.body)
 
-                                Text("App: \(publishedEncryptedUdid.isEmpty ? "—" : publishedEncryptedUdid)")
+                                let appUdid = publishedEncryptedUdid.isEmpty ? "—" : publishedEncryptedUdid
+                                    Text("App: \(appUdid)")
                                     .font(.subheadline)
                                     .foregroundColor(.secondary)
                                     .lineLimit(1)
