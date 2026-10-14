@@ -522,7 +522,7 @@ struct LCSettingsView: View {
                         .alert("Multitask UDID", isPresented: $showIdentityReport) {
                             Button("OK", role: .cancel) {}
                         } message: {
-                            Text(multitaskIdentityAlertMessage)
+                            Text(verbatim: multitaskIdentityAlertMessage)
                         }
                         // Manual override. The signing service normally injects the
                         // identifier into the host app's Info.plist, but a build that
@@ -609,7 +609,7 @@ struct LCSettingsView: View {
                         .alert("Background Install", isPresented: $showBackgroundInstallReport) {
                             Button("OK", role: .cancel) {}
                         } message: {
-                            Text(backgroundInstallAlertMessage)
+                            Text(verbatim: backgroundInstallAlertMessage)
                         }
                     }
 
