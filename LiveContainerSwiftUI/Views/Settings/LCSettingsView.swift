@@ -131,7 +131,7 @@ struct LCSettingsView: View {
     // Published by this app at launch for the extension to pick up.
     @AppStorage("LCHostEncryptedUdid", store: LCUtils.appGroupUserDefault)
     private var publishedEncryptedUdid: String = ""
-    @State private var manualEncryptedUdid: String = ""
+    // (duplicate removed - kept at top)
 
     // What the continued-processing scheduler did with the last install. Whether a
     // background task was refused, submitted, or ran is invisible from the outside:
