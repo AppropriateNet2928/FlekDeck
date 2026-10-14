@@ -238,8 +238,8 @@ struct LCSettingsView: View {
     // readable here: comparing two devices means sending this to someone else.
     private var multitaskIdentityReport: String {
         var lines: [String] = []
-        lines.append("App: \(publishedEncryptedUdid.isEmpty ? "—" : publishedEncryptedUdid)")
-        lines.append("Guest: \(hostIdentityUdid.isEmpty ? "—" : hostIdentityUdid)")
+        lines.append("App: \(publishedEncryptedUdidDisplay)")
+        lines.append("Guest: \(multitaskIdentityValueDisplay)")
         if hostIdentityStatus.isEmpty {
             lines.append("No app has been launched in parallel yet.")
         } else {
@@ -264,6 +264,10 @@ struct LCSettingsView: View {
         return lines.joined(separator: "\n")
     }
 
+    private var multitaskIdentityAlertMessage: String {
+        multitaskIdentityReport + "\n\nCopied to clipboard."
+    }
+
     private var backgroundInstallDate: Date? {
         LCUtils.appGroupUserDefault.object(forKey: "LCBackgroundInstallDate") as? Date
     }
@@ -280,6 +284,10 @@ struct LCSettingsView: View {
             lines.append("Recorded \(date.formatted(.relative(presentation: .numeric)))")
         }
         return lines.joined(separator: "\n")
+    }
+
+    private var backgroundInstallAlertMessage: String {
+        backgroundInstallReport + "\n\nCopied to clipboard."
     }
 
     // Only "Submitted", "Running" and "Finished" mean the chain is intact; every
@@ -508,7 +516,7 @@ struct LCSettingsView: View {
                         .alert("Multitask UDID", isPresented: $showIdentityReport) {
                             Button("OK", role: .cancel) {}
                         } message: {
-                            Text(multitaskIdentityReport + "\n\nCopied to clipboard.")
+                            Text(multitaskIdentityAlertMessage)
                         }
                         // Manual override. The signing service normally injects the
                         // identifier into the host app's Info.plist, but a build that
@@ -595,7 +603,7 @@ struct LCSettingsView: View {
                         .alert("Background Install", isPresented: $showBackgroundInstallReport) {
                             Button("OK", role: .cancel) {}
                         } message: {
-                            Text(backgroundInstallReport + "\n\nCopied to clipboard.")
+                            Text(backgroundInstallAlertMessage)
                         }
                     }
 
