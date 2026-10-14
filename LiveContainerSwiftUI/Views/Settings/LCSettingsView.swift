@@ -37,6 +37,9 @@ struct LCSettingsView: View {
     @State private var showBackgroundInstallReport = false
     @State var errorShow = false
     @State var errorInfo = ""
+    private var errorAlertMessage: Text {
+    Text(errorInfo)
+}
     @State var successShow = false
     @State var successInfo = ""
     @State private var udid: String = ""
@@ -874,10 +877,11 @@ struct LCSettingsView: View {
             .onChange(of: subscriptionEndDateStored) { newValue in
                 subscriptionEndDate = newValue.isEmpty ? nil : newValue
             }
-            .alert("lc.common.error".loc, isPresented: $errorShow) { Button("OK") {} }
-             message: {
-                 Text(errorInfo)
-            }
+            .alert("lc.common.error".loc, isPresented: $errorShow) {
+               Button("OK") {}
+        } message: {
+        errorAlertMessage
+     }
 
             .alert("lc.common.success".loc, isPresented: $successShow) { Button("OK") {} }
             message: { Text(successInfo) }
