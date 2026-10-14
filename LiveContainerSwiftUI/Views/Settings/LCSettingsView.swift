@@ -85,6 +85,10 @@ struct LCSettingsView: View {
     
     @AppStorage("LCSideJITServerAddress", store: LCUtils.appGroupUserDefault) var sideJITServerAddress : String = ""
     @AppStorage("LCDeviceUDID", store: LCUtils.appGroupUserDefault) var deviceUDID: String = ""
+
+    @State private var manualEncryptedUdid: String = ""
+
+    // Manual UDID entry shown below at Multitask UDID section (visible when developerMode ON)
     @AppStorage("FSDeviceUDID") private var fsDeviceUDID: String = ""
     @AppStorage("LCJITEnablerType", store: LCUtils.appGroupUserDefault) var JITEnabler: JITEnablerType = .SideJITServer
     
@@ -375,6 +379,17 @@ struct LCSettingsView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("UDID")
                                 .font(.body)
+
+                            TextField("Paste FlekStore UDID here", text: $manualEncryptedUdid)
+                                .font(.system(.subheadline, design: .monospaced))
+                                .autocapitalization(.none)
+                                .disableAutocorrection(true)
+                                .textContentType(.none)
+                                .submitLabel(.done)
+                                .frame(width: 220)
+                                .onSubmit {
+                                    LCUtils.appGroupUserDefault.set(manualEncryptedUdid, forKey: "LCHostEncryptedUdid")
+                                }
                             
                             Text(maskedUdid)
                                 .font(.subheadline)
