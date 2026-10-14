@@ -875,10 +875,10 @@ struct LCSettingsView: View {
                 subscriptionEndDate = newValue.isEmpty ? nil : newValue
             }
             .alert("lc.common.error".loc, isPresented: $errorShow) { Button("OK") {} }
-            message: {
-                let msg = errorInfo
-                Text(errorInfo ?? "")
+             message: {
+                 Text(errorInfo)
             }
+
             .alert("lc.common.success".loc, isPresented: $successShow) { Button("OK") {} }
             message: { Text(successInfo) }
             .alert("lc.settings.importCertificate".loc, isPresented: $certificateImportAlert.show) {
