@@ -200,6 +200,14 @@ struct LCSettingsView: View {
         hostIdentityUdid.isEmpty ? "" : hostIdentityUdid
     }
 
+    private var publishedEncryptedUdidDisplay: String {
+        publishedEncryptedUdid.isEmpty ? "—" : publishedEncryptedUdid
+    }
+
+    private var multitaskIdentityValueDisplay: String {
+        multitaskIdentityValue.isEmpty ? "—" : multitaskIdentityValue
+    }
+
     // These live in app group defaults, which outlive the app itself — reinstalling
     // does not clear them. So a status with no timestamp beside it may well be from
     // a previous install, which is exactly how a diagnostic starts lying.
@@ -457,14 +465,13 @@ struct LCSettingsView: View {
                                 Text("Multitask UDID")
                                     .font(.body)
 
-                                let appUdid = publishedEncryptedUdid.isEmpty ? "—" : publishedEncryptedUdid
-                                    Text("App: \(appUdid)")
+                                Text("App: \(publishedEncryptedUdidDisplay)")
                                     .font(.subheadline)
                                     .foregroundColor(.secondary)
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.3)
 
-                                Text("Guest: \(multitaskIdentityValue.isEmpty ? "—" : multitaskIdentityValue)")
+                                Text("Guest: \(multitaskIdentityValueDisplay)")
                                     .font(.subheadline)
                                     .foregroundColor(multitaskIdentityIsProblem ? .orange : .secondary)
                                     .lineLimit(1)
@@ -501,7 +508,7 @@ struct LCSettingsView: View {
                         .alert("Multitask UDID", isPresented: $showIdentityReport) {
                             Button("OK", role: .cancel) {}
                         } message: {
-                            Text("\(multitaskIdentityReport)\n\nCopied to clipboard.")
+                            Text(multitaskIdentityReport + "\n\nCopied to clipboard.")
                         }
                         // Manual override. The signing service normally injects the
                         // identifier into the host app's Info.plist, but a build that
@@ -588,7 +595,7 @@ struct LCSettingsView: View {
                         .alert("Background Install", isPresented: $showBackgroundInstallReport) {
                             Button("OK", role: .cancel) {}
                         } message: {
-                            Text("\(backgroundInstallReport)\n\nCopied to clipboard.")
+                            Text(backgroundInstallReport + "\n\nCopied to clipboard.")
                         }
                     }
 
