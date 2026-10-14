@@ -127,6 +127,7 @@ struct LCSettingsView: View {
     // Published by this app at launch for the extension to pick up.
     @AppStorage("LCHostEncryptedUdid", store: LCUtils.appGroupUserDefault)
     private var publishedEncryptedUdid: String = ""
+    @State private var manualEncryptedUdid: String = ""
 
     // What the continued-processing scheduler did with the last install. Whether a
     // background task was refused, submitted, or ran is invisible from the outside:
@@ -475,6 +476,42 @@ struct LCSettingsView: View {
                         } message: {
                             Text("\(multitaskIdentityReport)\n\nCopied to clipboard.")
                         }
+                        // Manual override. The signing service normally injects the
+                        // identifier into the host app's Info.plist, but a build that
+                        // never received it has nothing to publish. Paste the value
+                        // from FlekStore here and it is written straight into the
+                        // app group, which is exactly where LCHostIdentityInit looks.
+                        HStack(spacing: 12) {
+                            Image(systemName: "key.fill")
+                                .font(.system(size: 20))
+                                .foregroundColor(.white)
+                                .frame(width: 36, height: 36)
+                                .background(Color.orange)
+                                .cornerRadius(8)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Multitask UDID (manual)")
+                                    .font(.body)
+
+                                Text("Paste the encrypted UDID from FlekStore to enable parallel mode on this build.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(2)
+
+                                TextField("encrypted UDID", text: $manualEncryptedUdid)
+                                    .font(.system(.footnote, design: .monospaced))
+                                    .foregroundColor(.primary)
+                                    .textContentType(.none)
+                                    .autocapitalization(.none)
+                                    .disableAutocorrection(true)
+                                    .submitLabel(.done)
+                                    .onSubmit {
+                                        LCUtils.appGroupUserDefault.set(manualEncryptedUdid, forKey: "LCHostEncryptedUdid")
+                                    }
+                            }
+                            Spacer()
+                        }
+                        .padding(.vertical, 6)
 
                         // MARK: - Background install
                         // Whether the last install got background time, and if not,
