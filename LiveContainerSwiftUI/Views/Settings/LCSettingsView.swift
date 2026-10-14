@@ -874,14 +874,10 @@ struct LCSettingsView: View {
             .onChange(of: subscriptionEndDateStored) { newValue in
                 subscriptionEndDate = newValue.isEmpty ? nil : newValue
             }
-            .alert("lc.common.error".loc, isPresented: $errorShow){
-            } message: {
-                Text(errorInfo)
-            }
-            .alert("lc.common.success".loc, isPresented: $successShow){
-            } message: {
-                Text(successInfo)
-            }
+            .alert("lc.common.error".loc, isPresented: $errorShow) { Button("OK") {} }
+            message: { Text(errorInfo) }
+            .alert("lc.common.success".loc, isPresented: $successShow) { Button("OK") {} }
+            message: { Text(successInfo) }
             .alert("lc.settings.importCertificate".loc, isPresented: $certificateImportAlert.show) {
                 Button {
                     certificateImportAlert.close(result: true)
