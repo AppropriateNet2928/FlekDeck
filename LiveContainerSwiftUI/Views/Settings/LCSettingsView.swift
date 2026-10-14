@@ -40,8 +40,6 @@ struct LCSettingsView: View {
     private var errorAlertMessage: Text {
     Text(errorInfo)
 }
-    @State var successShow = false
-    @State var successInfo = ""
     @State private var udid: String = ""
     
     @State private var subscriptionEndDate: String?
@@ -367,66 +365,76 @@ struct LCSettingsView: View {
         )
     }
 
+    /// Keeps the UDID input and its refresh/copy action out of `body` so SwiftUI's
+    /// type checker has a smaller expression to resolve.
+    private var udidRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "wallet.pass.fill")
+                .font(.system(size: 20))
+                .foregroundColor(.white)
+                .frame(width: 36, height: 36)
+                .background(Color.blue)
+                .cornerRadius(8)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("UDID")
+                    .font(.body)
+
+                TextField("Paste FlekStore UDID here", text: $manualEncryptedUdid)
+                    .font(.system(.subheadline, design: .monospaced))
+                    .autocapitalization(.none)
+                    .disableAutocorrection(true)
+                    .textContentType(.none)
+                    .submitLabel(.done)
+                    .frame(width: 220)
+                    .onSubmit {
+                        LCUtils.appGroupUserDefault.set(
+                            manualEncryptedUdid,
+                            forKey: "LCHostEncryptedUdid"
+                        )
+                    }
+
+                Text(maskedUdid)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .scaledToFit()
+                    .minimumScaleFactor(0.3)
+            }
+
+            Spacer()
+
+            if udid.isEmpty {
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    Task {
+                        await checkSubscription()
+                    }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 18))
+                        .foregroundColor(.blue)
+                }
+                .disabled(isSubscriptionLoading)
+            } else {
+                Button {
+                    UIPasteboard.general.string = udid
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 18))
+                        .foregroundColor(.blue)
+                }
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
     var body: some View {
         NavigationView {
             Form {
                 Section {
-                    HStack(spacing: 12) {
-                        Image(systemName: "wallet.pass.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(.white)
-                            .frame(width: 36, height: 36)
-                            .background(Color.blue)
-                            .cornerRadius(8)
-                        
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("UDID")
-                                .font(.body)
-
-                            TextField("Paste FlekStore UDID here", text: $manualEncryptedUdid)
-                                .font(.system(.subheadline, design: .monospaced))
-                                .autocapitalization(.none)
-                                .disableAutocorrection(true)
-                                .textContentType(.none)
-                                .submitLabel(.done)
-                                .frame(width: 220)
-                                .onSubmit {
-                                    LCUtils.appGroupUserDefault.set(manualEncryptedUdid, forKey: "LCHostEncryptedUdid")
-                                }
-                            
-                            Text(maskedUdid)
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
-                                .scaledToFit()
-                                .minimumScaleFactor(0.3)
-                        }
-                        Spacer()
-                        
-                        if udid.isEmpty {
-                            Button {
-                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                Task {
-                                    await checkSubscription()
-                                }
-                            } label: {
-                                Image(systemName: "arrow.clockwise")
-                                    .font(.system(size: 18))
-                                    .foregroundColor(.blue)
-                            }
-                            .disabled(isSubscriptionLoading)
-                        } else {
-                            Button(action: {
-                                UIPasteboard.general.string = udid
-                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                            }) {
-                                Image(systemName: "doc.on.doc")
-                                    .font(.system(size: 18))
-                                    .foregroundColor(.blue)
-                            }
-                        }
-                    }
-                    .padding(.vertical, 6)
+                    udidRow
 
                     // Developer-only. This is a diagnostic — it exists to compare what the
                     // guest's identity check actually saw against what the app holds — and it
@@ -878,10 +886,10 @@ struct LCSettingsView: View {
                 subscriptionEndDate = newValue.isEmpty ? nil : newValue
             }
             .alert("lc.common.error".loc, isPresented: $errorShow) {
-               Button("OK") {}
-        } message: {
-        errorAlertMessage
-     }
+                Button("OK", role: .cancel) {}
+            } message: {
+                errorAlertMessage
+            }
 
            
             .alert("lc.settings.importCertificate".loc, isPresented: $certificateImportAlert.show) {
@@ -1413,8 +1421,6 @@ struct LCSettingsView: View {
             // Reuse the same storage logic that SideStore flow uses
             onSideStoreCertificateCallback(certificateData: certificateData, password: certificatePassword)
             
-            successInfo = "FlekSt0re certificate imported."
-            successShow = true
         } catch {
             errorInfo = "Failed to read FlekSt0re certificate: \(error.localizedDescription)"
             errorShow = true
