@@ -40,6 +40,17 @@ struct LCSettingsView: View {
     private var errorAlertMessage: Text {
     Text(errorInfo)
 }
+
+    private var multitaskIdentityCopyButton: some View {
+        Button {
+            UIPasteboard.general.string = multitaskIdentityValue
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        } label: {
+            Image(systemName: "doc.on.doc")
+                .font(.system(size: 18))
+                .foregroundColor(.blue)
+        }
+    }
     @State private var udid: String = ""
     
     @State private var subscriptionEndDate: String?
@@ -500,14 +511,7 @@ struct LCSettingsView: View {
                             Spacer()
 
                             if !multitaskIdentityValue.isEmpty {
-                                Button(action: {
-                                    UIPasteboard.general.string = multitaskIdentityValue
-                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                }) {
-                                    Image(systemName: "doc.on.doc")
-                                        .font(.system(size: 18))
-                                        .foregroundColor(.blue)
-                                }
+                                multitaskIdentityCopyButton
                             }
                         }
                         .padding(.vertical, 6)
