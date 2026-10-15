@@ -192,7 +192,7 @@ struct FlekSourcesPopup: View {
         }
     }
 
-    @MainActor private func showErr(_ msg: String) {
+    @MainActor private func showErr(_ msg: String) async {
         errorMessage = msg
         showError = true
     }
