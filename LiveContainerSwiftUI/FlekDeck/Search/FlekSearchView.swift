@@ -293,10 +293,10 @@ class MultiRepoSearchModel: ObservableObject {
 
     /// Cap on matches kept per repo section — bounds both the filtering work and
     /// the rendered rows for very broad (short) queries so results stay responsive.
-    static let maxResultsPerRepo = 50
+    nonisolated static let maxResultsPerRepo = 50
     /// Minimum characters before a repo search runs. 1 = no gate (the per-repo cap
     /// already bounds broad queries); raise to 2–3 to suppress 1‑character searches.
-    static let minQueryLength = 1
+    nonisolated static let minQueryLength = 1
 
     private var repos: [AppRepository] = []
     private var cachedApps: [String: [FSAppModel]] = [:] // keyed by sourceURL
