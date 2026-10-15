@@ -394,6 +394,49 @@ struct LCSettingsView: View {
 
     /// Keeps the UDID input and its refresh/copy action out of `body` so SwiftUI's
     /// type checker has a smaller expression to resolve.
+    private var manualMultitaskUDIDRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "key.fill")
+                .font(.system(size: 20))
+                .foregroundColor(.white)
+                .frame(width: 36, height: 36)
+                .background(Color.orange)
+                .cornerRadius(8)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Multitask UDID (manual)")
+                    .font(.body)
+
+                Text("Paste the encrypted UDID from FlekStore to enable parallel mode on this build.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+
+                TextField("encrypted UDID", text: $manualEncryptedUdid)
+                    .font(.system(.footnote, design: .monospaced))
+                    .foregroundColor(.primary)
+                    .textContentType(.none)
+                    .autocapitalization(.none)
+                    .disableAutocorrection(true)
+                    .submitLabel(.done)
+                    .onSubmit {
+                        LCUtils.appGroupUserDefault.set(manualEncryptedUdid, forKey: "LCHostEncryptedUdid")
+                        // Propagate to all identity-check locations so parallel mode works.
+                        LCUtils.appGroupUserDefault.set(manualEncryptedUdid, forKey: "LCHostEncryptedUdid")
+                        LCUtils.appGroupUserDefault.set(manualEncryptedUdid, forKey: "LCDeviceUDID")
+                        UserDefaults.standard.set(manualEncryptedUdid, forKey: "LCCertificatePassword")
+                        UserDefaults.standard.set(manualEncryptedUdid, forKey: "LCCertificateTeamId")
+                        // Write to Info.plist for bundle-level reads (LCHostIdentity.m reads from bundle).
+                        if let dict = Bundle.main.infoDictionary?.mutableCopy() as? NSMutableDictionary {
+                            dict["encryptedUdid"] = manualEncryptedUdid
+                        }
+                    }
+            }
+            Spacer()
+        }
+        .padding(.vertical, 6)
+    }
+
     private var udidRow: some View {
         HStack(spacing: 12) {
             Image(systemName: "wallet.pass.fill")
