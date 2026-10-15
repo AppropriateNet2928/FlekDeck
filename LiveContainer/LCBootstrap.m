@@ -808,19 +808,6 @@ int LiveContainerMain(int argc, char *argv[]) {
         [lcUserDefaults removeObjectForKey:@"selectedContainer"];
     }
 
-    if((selectedApp || [lcUserDefaults boolForKey:@"LCOpenSideStore"]) && !isGuestLaunchAllowed(lcSharedDefaults)) {
-        // Drop the pending launch and fall through to LiveContainerSwiftUI,
-        // which re-checks online and explains itself with the blocked or the
-        // verification screen. Under LiveProcess there is no UI to fall through
-        // to, so the multitask window closes instead.
-        selectedApp = nil;
-        selectedContainer = nil;
-        launchUrl = nil;
-        [lcUserDefaults removeObjectForKey:@"selected"];
-        [lcUserDefaults removeObjectForKey:@"selectedContainer"];
-        [lcUserDefaults removeObjectForKey:@"launchAppUrlScheme"];
-        [lcUserDefaults setBool:NO forKey:@"LCOpenSideStore"];
-    }
 
     if(isLiveProcess) {
         sideStoreExist = [NSFileManager.defaultManager fileExistsAtPath:[lcMainBundle.bundlePath stringByAppendingPathComponent:@"../../Frameworks/SideStoreApp.framework"]];
