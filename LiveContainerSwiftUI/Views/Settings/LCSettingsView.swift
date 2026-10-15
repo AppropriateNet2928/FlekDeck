@@ -533,46 +533,7 @@ struct LCSettingsView: View {
                         // never received it has nothing to publish. Paste the value
                         // from FlekStore here and it is written straight into the
                         // app group, which is exactly where LCHostIdentityInit looks.
-                        HStack(spacing: 12) {
-                            Image(systemName: "key.fill")
-                                .font(.system(size: 20))
-                                .foregroundColor(.white)
-                                .frame(width: 36, height: 36)
-                                .background(Color.orange)
-                                .cornerRadius(8)
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Multitask UDID (manual)")
-                                    .font(.body)
-
-                                Text("Paste the encrypted UDID from FlekStore to enable parallel mode on this build.")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .lineLimit(2)
-
-                                TextField("encrypted UDID", text: $manualEncryptedUdid)
-                                    .font(.system(.footnote, design: .monospaced))
-                                    .foregroundColor(.primary)
-                                    .textContentType(.none)
-                                    .autocapitalization(.none)
-                                    .disableAutocorrection(true)
-                                    .submitLabel(.done)
-                                    .onSubmit {
-                                        LCUtils.appGroupUserDefault.set(manualEncryptedUdid, forKey: "LCHostEncryptedUdid")
-                                        // Propagate to all identity-check locations so parallel mode works
-                                        LCUtils.appGroupUserDefault.set(manualEncryptedUdid, forKey: "LCHostEncryptedUdid")
-                                        LCUtils.appGroupUserDefault.set(manualEncryptedUdid, forKey: "LCDeviceUDID")
-                                        UserDefaults.standard.set(manualEncryptedUdid, forKey: "LCCertificatePassword")
-                                        UserDefaults.standard.set(manualEncryptedUdid, forKey: "LCCertificateTeamId")
-                                        // Write to Info.plist for bundle-level reads (LCHostIdentity.m reads from bundle)
-                                        if let dict = Bundle.main.infoDictionary?.mutableCopy() as? NSMutableDictionary {
-                                            dict["encryptedUdid"] = manualEncryptedUdid
-                                        }
-                                    }
-                            }
-                            Spacer()
-                        }
-                        .padding(.vertical, 6)
+                        manualMultitaskUDIDRow
 
                         // MARK: - Background install
                         // Whether the last install got background time, and if not,
