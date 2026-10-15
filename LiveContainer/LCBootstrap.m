@@ -304,21 +304,7 @@ static NSString* invokeAppMain(NSString *selectedApp, NSString *selectedContaine
     if([[lcUserDefaults objectForKey:@"LCWaitForDebugger"] boolValue]) {
         sleep(100);
     }
-    if (!LCSharedUtils.certificatePassword && !isSideStore) {
-#if !TARGET_OS_SIMULATOR
-        if(@available(iOS 26.0 ,*))  {
-            return @"JITLess mode is required since iOS 26. Please set it up in settings. \nPlease go to FlekDeck settings -> tap \"Import Flekstore certificate\" / \"Import Certificate\"";
-        }
-#endif
-        // First of all, let's check if we have JIT
-        for (int i = 0; i < 10 && !checkJITEnabled(); i++) {
-            usleep(1000*100);
-        }
-        if (!checkJITEnabled()) {
-            appError = @"JIT was not enabled. If you want to use FlekDeck without JIT, setup JITLess mode in settings.";
-            return appError;
-        }
-    }
+
 
     NSFileManager *fm = NSFileManager.defaultManager;
     NSString *docPath = [NSString stringWithFormat:@"%s/Documents", getenv("LC_HOME_PATH")];
@@ -369,9 +355,7 @@ static NSString* invokeAppMain(NSString *selectedApp, NSString *selectedContaine
         isSharedBundle = true;
     }
     
-    if(!guestAppInfo) {
-        return @"App bundle not found! Unable to read LCAppInfo.plist.";
-    }
+    
     
     if([guestAppInfo[@"doUseLCBundleId"] boolValue] ) {
         NSMutableDictionary* infoPlist = [NSMutableDictionary dictionaryWithContentsOfFile:[NSString stringWithFormat:@"%@/Info.plist", bundlePath]];
@@ -395,9 +379,7 @@ static NSString* invokeAppMain(NSString *selectedApp, NSString *selectedContaine
     
     NSBundle *appBundle = [[NSBundle alloc] initWithPathForMainBundle:bundlePath];
     
-    if(!appBundle) {
-        return @"App not found";
-    }
+ 
     
     // find container in Info.plist
     NSString* dataUUID = selectedContainer;
